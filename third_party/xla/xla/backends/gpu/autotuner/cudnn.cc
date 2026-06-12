@@ -269,6 +269,10 @@ GetCudnnFusionConfigs(const HloInstruction& instr,
           "Deviceless cuDNN compilation requires cuDNN >= 9.8.");
     }
     stream_executor = nullptr;
+  } else if (stream_executor == nullptr) {
+    return absl::InvalidArgumentError(
+        "Null stream executor is not supported when cuDNN deviceless "
+        "compilation is disabled.");
   }
   ASSIGN_OR_RETURN(int plan_count,
                    CuDnnFusionCompiler::GetAvailablePlanCount(
@@ -288,6 +292,9 @@ GetCudnnFusionConfigs(const HloInstruction& instr,
 absl::StatusOr<std::vector<std::unique_ptr<BackendConfig>>>
 GetConvolutionCustomCallConfigs(const HloCustomCallInstruction* instr,
                                 se::StreamExecutor* stream_executor) {
+  if (stream_executor == nullptr) {
+    return absl::InvalidArgumentError("Null stream executor is not supported.");
+  }
   ASSIGN_OR_RETURN(GpuConvConfig gpu_conv_config, GetGpuConvConfig(instr));
   se::dnn::ConvolutionKind conv_kind =
       CudnnConvKindToProto(gpu_conv_config.kind);
@@ -384,18 +391,8 @@ absl::StatusOr<std::unique_ptr<BackendConfig>> CudnnBackend::GetDefaultConfig(
     return config;
   }
 
-  if (stream_executor() != nullptr && instr.opcode() == HloOpcode::kFusion &&
-      IsSupportedCudnnFusion(instr, stream_executor(), debug_options())) {
-    ASSIGN_OR_RETURN(std::vector<std::unique_ptr<BackendConfig>> configs,
-                     GetCudnnFusionConfigs(instr, stream_executor(),
-                                           target_config(), debug_options()));
-    if (!configs.empty()) {
-      return std::move(configs[0]);
-    }
-  }
-
-  return absl::InvalidArgumentError(
-      "Cannot get default config for cudnn backend without device.");
+  return absl::UnimplementedError(
+      "Cannot get default config for cudnn backend.");
 }
 
 absl::StatusOr<std::vector<std::unique_ptr<BackendConfig>>>
