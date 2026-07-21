@@ -195,6 +195,12 @@ class DfsHloVisitorBase {
   virtual absl::Status HandleErf(HloInstructionPtr hlo) {
     return HandleElementwiseUnary(hlo);
   }
+  virtual absl::Status HandleErfc(HloInstructionPtr hlo) {
+    return HandleElementwiseUnary(hlo);
+  }
+  virtual absl::Status HandleErfinv(HloInstructionPtr hlo) {
+    return HandleElementwiseUnary(hlo);
+  }
   virtual absl::Status HandleLogistic(HloInstructionPtr hlo) {
     return HandleElementwiseUnary(hlo);
   }

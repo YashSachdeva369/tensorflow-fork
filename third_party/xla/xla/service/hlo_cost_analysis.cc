@@ -169,6 +169,8 @@ absl::Status HloCostAnalysis::HandleElementwiseOp(
       opcode == HloOpcode::kCos ||
       opcode == HloOpcode::kCosh ||
       opcode == HloOpcode::kErf ||
+      opcode == HloOpcode::kErfc ||
+      opcode == HloOpcode::kErfinv ||
       opcode == HloOpcode::kExp ||
       opcode == HloOpcode::kExpm1 ||
       opcode == HloOpcode::kLog ||

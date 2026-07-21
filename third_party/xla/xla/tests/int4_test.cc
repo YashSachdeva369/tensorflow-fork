@@ -355,6 +355,8 @@ class ElementwiseTest : public HloPjRtInterpreterReferenceMixin<HloTestBase>,
       case HloOpcode::kSin:
       case HloOpcode::kSinh:
       case HloOpcode::kErf:
+      case HloOpcode::kErfc:
+      case HloOpcode::kErfinv:
       case HloOpcode::kExp:
       case HloOpcode::kExpm1:
       case HloOpcode::kFloor:

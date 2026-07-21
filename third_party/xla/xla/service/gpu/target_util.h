@@ -68,6 +68,8 @@ enum class TargetDeviceFunctionID {
   kTan,
   kTanh,
   kErf,
+  kErfc,
+  kErfinv,
   kAcosh,
   kAcos,
   kSinh,

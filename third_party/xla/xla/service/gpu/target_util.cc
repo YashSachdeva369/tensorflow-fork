@@ -298,6 +298,12 @@ struct TargetDeviceFunction GetDeviceFunctionRoot(
     case TargetDeviceFunctionID::kErf: {
       return {"__nv_erf", "__ocml_erf", "_Z15__spirv_ocl_erf"};
     }
+    case TargetDeviceFunctionID::kErfc: {
+      return {"__nv_erfc", "__ocml_erfc", "_Z16__spirv_ocl_erfc"};
+    }
+    case TargetDeviceFunctionID::kErfinv: {
+      return {"__nv_erfinv", "__ocml_erfinv", "_Z18__spirv_ocl_erfinv"};
+    }
     case TargetDeviceFunctionID::kExp: {
       return {"__nv_exp", "__ocml_exp", "_Z15__spirv_ocl_exp"};
     }
@@ -366,6 +372,8 @@ bool HasF16Implementation(TargetDeviceFunctionID func_id,
           func_id == TargetDeviceFunctionID::kTan ||
           func_id == TargetDeviceFunctionID::kTanh ||
           func_id == TargetDeviceFunctionID::kErf ||
+          func_id == TargetDeviceFunctionID::kErfc ||
+          func_id == TargetDeviceFunctionID::kErfinv ||
           func_id == TargetDeviceFunctionID::kAcosh ||
           func_id == TargetDeviceFunctionID::kAcos ||
           func_id == TargetDeviceFunctionID::kSinh ||

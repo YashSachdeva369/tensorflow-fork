@@ -1179,6 +1179,8 @@ ColorScheme HloDotDumper::GetInstructionColor(const HloInstruction* instr) {
     case HloOpcode::kCosh:
     case HloOpcode::kDivide:
     case HloOpcode::kErf:
+    case HloOpcode::kErfc:
+    case HloOpcode::kErfinv:
     case HloOpcode::kExp:
     case HloOpcode::kExpm1:
     case HloOpcode::kFloor:

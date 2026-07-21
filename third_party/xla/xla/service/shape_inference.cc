@@ -352,6 +352,8 @@ absl::StatusOr<DimAndBound> InferMostSpecificDimAndBound(int64_t dim,
                             // backends.
     case HloOpcode::kCeil:
     case HloOpcode::kErf:
+    case HloOpcode::kErfc:
+    case HloOpcode::kErfinv:
     case HloOpcode::kRoundNearestAfz:
     case HloOpcode::kRoundNearestEven:
       if (!ShapeUtil::ElementIsFloating(shape)) {
