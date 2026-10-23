@@ -14,8 +14,11 @@
    ==============================================================================
 */
 #ifdef GOOGLE_CUDA
+#include <algorithm>
 #include <chrono>
 #include <complex>
+#include <limits>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -186,6 +189,13 @@ GpuSolver::GpuSolver(OpKernelContext* context) : context_(context) {
 }
 
 GpuSolver::~GpuSolver() {
+#if CUDA_VERSION >= 12060
+  if (cusolver_dn_params_ != nullptr) {
+    CHECK(cusolverDnDestroyParams(cusolver_dn_params_) ==
+          CUSOLVER_STATUS_SUCCESS)
+        << "Failed to destroy cuSolverDN parameters.";
+  }
+#endif  // CUDA_VERSION >= 12060
   for (const auto& tensor_ref : scratch_tensor_refs_) {
     tensor_ref.Unref();
   }
@@ -692,6 +702,100 @@ HEEVD_INSTANCE(float, sy, S);
 HEEVD_INSTANCE(double, sy, D);
 HEEVD_INSTANCE(complex64, he, C);
 HEEVD_INSTANCE(complex128, he, Z);
+
+#if CUDA_VERSION >= 12060
+namespace {
+
+template <typename T>
+constexpr cudaDataType CudaDataTypeForEig() {
+  if constexpr (std::is_same_v<T, float>) {
+    return CUDA_R_32F;
+  } else if constexpr (std::is_same_v<T, double>) {
+    return CUDA_R_64F;
+  } else if constexpr (std::is_same_v<T, complex64>) {
+    return CUDA_C_32F;
+  } else {
+    static_assert(std::is_same_v<T, complex128>);
+    return CUDA_C_64F;
+  }
+}
+
+}  // namespace
+
+template <typename InputScalar, typename OutputScalar>
+Status GpuSolver::Geev(int64_t n, InputScalar* dev_A, OutputScalar* dev_W,
+                       InputScalar* dev_VR, int* dev_lapack_info,
+                       int64_t batch_size) {
+  if (n < 0) {
+    return errors::InvalidArgument(
+        "Matrix dimension must be non-negative; got ", n);
+  }
+  if (batch_size < 0) {
+    return errors::InvalidArgument("Batch size must be non-negative; got ",
+                                   batch_size);
+  }
+  if (n == 0 || batch_size == 0) return absl::OkStatus();
+
+  mutex_lock lock(handle_map_mutex);
+  if (cusolver_dn_params_ == nullptr) {
+    TF_RETURN_IF_CUSOLVER_ERROR(cusolverDnCreateParams(&cusolver_dn_params_));
+  }
+
+  const cudaDataType data_type_a = CudaDataTypeForEig<InputScalar>();
+  const cudaDataType data_type_w = CudaDataTypeForEig<OutputScalar>();
+  const cudaDataType data_type_vr = CudaDataTypeForEig<InputScalar>();
+  const cusolverEigMode_t jobvr = dev_VR == nullptr
+                                      ? CUSOLVER_EIG_MODE_NOVECTOR
+                                      : CUSOLVER_EIG_MODE_VECTOR;
+
+  size_t device_workspace_bytes = 0;
+  size_t host_workspace_bytes = 0;
+  TF_RETURN_IF_CUSOLVER_ERROR(cusolverDnXgeev_bufferSize(
+      cusolver_dn_handle_, cusolver_dn_params_, CUSOLVER_EIG_MODE_NOVECTOR,
+      jobvr, n, data_type_a, dev_A, n, data_type_w, dev_W, data_type_a,
+      nullptr, 1, data_type_vr, dev_VR, dev_VR == nullptr ? 1 : n, data_type_a,
+      &device_workspace_bytes, &host_workspace_bytes));
+
+  if (device_workspace_bytes >
+          static_cast<size_t>(std::numeric_limits<int64_t>::max()) ||
+      host_workspace_bytes >
+          static_cast<size_t>(std::numeric_limits<int64_t>::max())) {
+    return errors::InvalidArgument("cuSOLVER GEEV workspace is too large.");
+  }
+  ScratchSpace<uint8_t> device_workspace = GetScratchSpace<uint8_t>(
+      static_cast<int64_t>(std::max<size_t>(device_workspace_bytes, 1)),
+      "Eig device workspace", /*on_host=*/false);
+  ScratchSpace<uint8_t> host_workspace = GetScratchSpace<uint8_t>(
+      static_cast<int64_t>(std::max<size_t>(host_workspace_bytes, 1)),
+      "Eig host workspace", /*on_host=*/true);
+
+  for (int64_t batch = 0; batch < batch_size; ++batch) {
+    InputScalar* matrix = dev_A + batch * n * n;
+    OutputScalar* eigenvalues = dev_W + batch * n;
+    InputScalar* eigenvectors =
+        dev_VR == nullptr ? nullptr
+                         : dev_VR + batch * n * n;
+    TF_RETURN_IF_CUSOLVER_ERROR(cusolverDnXgeev(
+        cusolver_dn_handle_, cusolver_dn_params_, CUSOLVER_EIG_MODE_NOVECTOR,
+        jobvr, n, data_type_a, matrix, n, data_type_w, eigenvalues, data_type_a,
+        nullptr, 1, data_type_vr, eigenvectors,
+        eigenvectors == nullptr ? 1 : n, data_type_a,
+        device_workspace.mutable_data(), device_workspace_bytes,
+        host_workspace.mutable_data(), host_workspace_bytes,
+        dev_lapack_info + batch));
+  }
+  return absl::OkStatus();
+}
+
+template Status GpuSolver::Geev<float, complex64>(int64_t, float*, complex64*,
+                                                  float*, int*, int64_t);
+template Status GpuSolver::Geev<double, complex128>(
+    int64_t, double*, complex128*, double*, int*, int64_t);
+template Status GpuSolver::Geev<complex64, complex64>(
+    int64_t, complex64*, complex64*, complex64*, int*, int64_t);
+template Status GpuSolver::Geev<complex128, complex128>(
+    int64_t, complex128*, complex128*, complex128*, int*, int64_t);
+#endif  // CUDA_VERSION >= 12060
 
 template <typename Scalar, typename BufSizeFnT, typename SolverFnT>
 static inline absl::Status GesvdImpl(

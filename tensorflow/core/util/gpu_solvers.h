@@ -535,6 +535,17 @@ class GpuSolver {
                      typename Eigen::NumTraits<Scalar>::Real* dev_W,
                      int* dev_lapack_info);
 
+#if CUDA_VERSION >= 12060
+  // Computes the eigenvalues and, optionally, right eigenvectors of a batch
+  // of general matrices using cuSOLVER's generic GEEV API. The input and
+  // eigenvector matrices use the same scalar type. Eigenvalues use a complex
+  // scalar type, including for real-valued input matrices.
+  template <typename InputScalar, typename OutputScalar>
+  absl::Status Geev(int64_t n, InputScalar* dev_A, OutputScalar* dev_W,
+                    InputScalar* dev_VR, int* dev_lapack_info,
+                    int64_t batch_size);
+#endif  // CUDA_VERSION >= 12060
+
   // Singular value decomposition.
   // Returns OkStatus() if the kernel was launched successfully.
   // TODO(rmlarsen, volunteers): Add support for complex types.
@@ -579,6 +590,9 @@ class GpuSolver {
   cudaStream_t cuda_stream_;
   cusolverDnHandle_t cusolver_dn_handle_;
   cublasHandle_t cublas_handle_;
+#if CUDA_VERSION >= 12060
+  cusolverDnParams_t cusolver_dn_params_ = nullptr;
+#endif
 #else  // TENSORFLOW_USE_ROCM
   hipStream_t hip_stream_;
   rocblas_handle rocm_blas_handle_;

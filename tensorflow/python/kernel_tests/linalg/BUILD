@@ -80,9 +80,11 @@ tf_py_strict_test(
         "nomsan",  # TODO(b/213581489): MSAN false positives from LAPACK use inside NumPy.
     ],
     deps = [
+        "//tensorflow/core/protobuf:for_core_protos_py_proto",
         "//tensorflow/python/framework:constant_op",
         "//tensorflow/python/framework:errors",
         "//tensorflow/python/framework:for_generated_wrappers",
+        "//tensorflow/python/framework:ops",
         "//tensorflow/python/framework:test_lib",
         "//tensorflow/python/ops:array_ops",
         "//tensorflow/python/ops:gradient_checker_v2",
@@ -92,6 +94,7 @@ tf_py_strict_test(
         "//tensorflow/python/ops:random_ops",
         "//tensorflow/python/ops:sort_ops",
         "//tensorflow/python/platform:client_testlib",
+        "//tensorflow/python/platform:sysconfig",
         "//third_party/py/numpy",
     ],
     # b/127344411: xla_enable_strict_auto_jit = True,

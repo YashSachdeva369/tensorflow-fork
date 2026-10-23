@@ -16,9 +16,11 @@
 
 import numpy as np
 
+from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes as dtypes_lib
 from tensorflow.python.framework import errors
+from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_linalg_ops
@@ -27,6 +29,7 @@ from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import sort_ops
+from tensorflow.python.platform import sysconfig
 from tensorflow.python.platform import test
 
 
@@ -72,6 +75,60 @@ class EigTest(test.TestCase):
       self.assertAllClose(val[2], val[4])
       self.assertAllEqual(val[4], val[5])
       self.assertAllEqual(val[1], val[3])
+
+  @test_util.run_deprecated_v1
+  def testGpuKernel(self):
+    if not test.is_gpu_available(cuda_only=True):
+      self.skipTest("A CUDA GPU is required for the Eig GPU kernel test.")
+
+    cuda_version = str(sysconfig.get_build_info().get("cuda_version", ""))
+    try:
+      cuda_version = tuple(int(part) for part in cuda_version.split(".")[:2])
+    except ValueError:
+      cuda_version = ()
+    if cuda_version < (12, 6):
+      self.skipTest("The cuSOLVER GEEV API requires CUDA 12.6 or newer.")
+
+    # The first real matrix has a complex conjugate eigenpair, exercising
+    # cuSOLVER's real-to-complex eigenvector conversion. The second matrix
+    # covers batching and a matrix with real eigenvalues.
+    for dtype in (np.float32, np.float64, np.complex64, np.complex128):
+      matrices = np.array(
+          [[[0, -1], [1, 0]], [[2, 1], [0, 3]]], dtype=dtype
+      )
+      if np.issubdtype(dtype, np.complexfloating):
+        matrices[1, 0, 1] += 0.25j
+
+      with ops.device("/device:GPU:0"):
+        eigenvalues, eigenvectors = linalg_ops.eig(matrices)
+        eigenvalues_only = linalg_ops.eigvals(matrices)
+
+      config = config_pb2.ConfigProto(allow_soft_placement=False)
+      with self.session(config=config) as sess:
+        values, vectors, values_only = sess.run(
+            [eigenvalues, eigenvectors, eigenvalues_only]
+        )
+
+      output_dtype = np.complex64
+      if dtype not in (np.float32, np.complex64):
+        output_dtype = np.complex128
+      tolerance = 2e-4 if output_dtype == np.complex64 else 1e-10
+      expected_values = np.linalg.eigvals(matrices)
+      self.assertAllClose(
+          SortEigenValues(expected_values),
+          SortEigenValues(values),
+          atol=tolerance,
+          rtol=tolerance)
+      self.assertAllClose(
+          SortEigenValues(expected_values),
+          SortEigenValues(values_only),
+          atol=tolerance,
+          rtol=tolerance)
+      self.assertAllClose(
+          np.matmul(matrices.astype(output_dtype), vectors),
+          np.einsum("bij,bj->bij", vectors, values),
+          atol=tolerance,
+          rtol=tolerance)
 
   def testMatrixThatFailsWhenFlushingDenormsToZero(self):
     # Test a 32x32 matrix which is known to fail if denorm floats are flushed to

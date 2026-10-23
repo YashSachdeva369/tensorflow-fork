@@ -209,6 +209,7 @@ tf_kernel_library(
 
 tf_kernel_library(
     name = "eig_op",
+    gpu_deps = ["//tensorflow/core/platform:stream_executor"],
     prefix = "eig_op",
     deps = LINALG_DEPS + ["//tensorflow/core:lib_internal"] + if_cuda([
         "//tensorflow/core/kernels:cwise_op",
